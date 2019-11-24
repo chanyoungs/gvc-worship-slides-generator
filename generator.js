@@ -1,16 +1,16 @@
 var textStyle;
 
 function generatePresentation(){
-//  Get chosen presentations and the chosen file name to be saved
+  //  Get chosen presentations and the chosen file name to be saved
   var [srcPresentations, fileName] = getData_();
   
-//  Destination folder to save the presentation
+  //  Destination folder to save the presentation
   folder = DriveApp.getFolderById("1nowuYSLNcQXi8GFBJspJXw0uZzPqI_Ki");
   
-//  Check if a file with the same name already exists
+  //  Check if a file with the same name already exists
   files = folder.getFilesByName(fileName)
-
-//  If a file already exists with the same name, pop up a dialog to choose to overwrte or to cancel
+  
+  //  If a file already exists with the same name, pop up a dialog to choose to overwrte or to cancel
   if (files.hasNext()) {
     var ui = SpreadsheetApp.getUi(); // Same variations.
     var result = ui.alert(
@@ -20,33 +20,34 @@ function generatePresentation(){
     
     if (result == ui.Button.YES) {
       // If "Yes", then delete the existing file
-      Drive.Files.remove(files.next().getId());
+      folder.removeFile(files.next());
+      //      Drive.Files.remove(files.next().getId());
     } else {
       // If "No", then exit
       ui.alert('Saving cancelled');
       return
     }
   }
-    
-//  Make a copy of the template presentation 
+  
+  //  Make a copy of the template presentation 
   var template = DriveApp.getFileById("1bcEBQgSAsI29v1JwYg3E9OS0TRK8HV_a9p5-kP51HhY");
   var templateCopy = template.makeCopy(fileName, folder)
-////  Create a google slide file  
-//  var tempPresentation = SlidesApp.create(fileName);
-////  Locate the file using drive app
-//  var tempFile = DriveApp.getFileById(tempPresentation.getId());
-////  Save file id
-//  var fileId = tempFile.getId();
-////  Copy file(with the same id) to the relevant folder
-//  folder.addFile(tempFile);
-////  Remove the original file in the incorrect folder
-//  DriveApp.getRootFolder().removeFile(tempFile);
-//
-////  Open created empty slide file by id
-//  var master = SlidesApp.openById(fileId);
-
+  ////  Create a google slide file  
+  //  var tempPresentation = SlidesApp.create(fileName);
+  ////  Locate the file using drive app
+  //  var tempFile = DriveApp.getFileById(tempPresentation.getId());
+  ////  Save file id
+  //  var fileId = tempFile.getId();
+  ////  Copy file(with the same id) to the relevant folder
+  //  folder.addFile(tempFile);
+  ////  Remove the original file in the incorrect folder
+  //  DriveApp.getRootFolder().removeFile(tempFile);
+  //
+  ////  Open created empty slide file by id
+  //  var master = SlidesApp.openById(fileId);
+  
   var master = SlidesApp.openById(templateCopy.getId())
-//  Get template text styles
+  //  Get template text styles
   
   var ts = master.getSlides()[0].getShapes()[0].getText().getTextStyle()
   textStyle = {
@@ -61,6 +62,8 @@ function generatePresentation(){
   //  Remove all existing slides
   master.getSlides().forEach(function(slide) {slide.remove()});
   
+  var counter = 1;
+  var total = srcPresentations.length;
   //  Loop through source presentations
   srcPresentations.forEach(function (srcPresentation) {
     //    Insert slides if the file exists
@@ -70,20 +73,24 @@ function generatePresentation(){
       
       //      Loop through source slides in a given source presentation
       srcSlides.forEach(function(srcSlide){
-        slide = master.appendSlide(srcSlide);
-        
-        //        Set background as black
-        var background = slide.getBackground();
-        background.setSolidFill(0, 0, 0);
-        
-        //        Set text styles
-        var textBox = slide.getShapes()[0];
-        if (textBox)
-          styleText_(textBox, w, h, [255, 255, 255], SlidesApp.ContentAlignment.TOP);  
-        
-        //        Add notes(bug fix: for some reason, google slides speakernote cannot handle spaces and so we replace spaces with another version
-        if (srcPresentation.notes)
-          srcSlide.getNotesPage().getSpeakerNotesShape().getText().setText(srcPresentation.notes.replace(/\s/g, '\u00A0'));      
+        if (srcSlide.getShapes()[0]) {
+          slide = master.appendSlide(srcSlide);
+          
+          //        Set background as black
+          slide.getBackground().setSolidFill(0, 0, 0);
+          
+          //        Set text styles
+          var textBox = slide.getShapes()[0];
+          var err = styleText_(textBox, w, h, [255, 255, 255], SlidesApp.ContentAlignment.TOP);       
+          
+          //        Add notes(bug fix: for some reason, google slides speakernote cannot handle spaces and so we replace spaces with another version
+          if (srcPresentation.notes)
+            srcSlide.getNotesPage().getSpeakerNotesShape().getText().setText(srcPresentation.notes.replace(/\s/g, '\u00A0'));     
+          
+          //          If there was an error with text style, it probably means that there
+          if (err)
+            slide.remove();
+        }
       })
       
     }
@@ -91,6 +98,8 @@ function generatePresentation(){
     else {   
       //      Append a blank slide
       var newSlide = master.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+      //      Set background as white
+      newSlide.getBackground().setSolidFill(255, 255, 255);
       //      Create a textbox
       var textBox = newSlide.insertShape(SlidesApp.ShapeType.TEXT_BOX);
       //      Set text
@@ -98,19 +107,24 @@ function generatePresentation(){
       //      Style text
       styleText_(textBox, w, h, [255, 0, 0], SlidesApp.ContentAlignment.MIDDLE); 
       
-//      Add notes
+      //      Add notes
       if (srcPresentation.notes)
-          newSlide.getNotesPage().getSpeakerNotesShape().getText().setText(srcPresentation.notes.replace(/\s/g, '\u00A0'));    
-    }    
+        newSlide.getNotesPage().getSpeakerNotesShape().getText().setText(srcPresentation.notes.replace(/\s/g, '\u00A0'));    
+    }
+//    Notify progress
+    sheetMain.toast(counter+"/"+total+" complete!...", 'Status', -1);    
+    counter++
   })
-//  Show google slides URL on form
+  //  Show google slides URL on form
   SpreadsheetApp.getActiveSpreadsheet().getRangeByName("googleSlidesUrl").setValue(master.getUrl());
   //  Show google slides URL on form
-//  var file = DriveApp.getFileById(master.getId());
+  //  var file = DriveApp.getFileById(master.getId());
   SpreadsheetApp.getActiveSpreadsheet().getRangeByName("downloadUrl").setValue("https://docs.google.com/presentation/d/"+master.getId()+"/export/pptx");
+  sheetMain.toast("Done!", 'Status', -1); 
 }
 
 function styleText_(textBox, w, h, rgbColour, alignVertical) {
+  Logger.log("checkin1")
   //  Set textbox size to fill the page and to align the text in the middle(vertically)
   textBox
   .setLeft(0)
@@ -118,33 +132,39 @@ function styleText_(textBox, w, h, rgbColour, alignVertical) {
   .setWidth(w)
   .setHeight(h)
   .setContentAlignment(alignVertical);
-  
+  Logger.log("checkin2")
   //      Get text range
   var textRange = textBox.getText();
   
-  //      Change text style to bold and red
-  textRange.getTextStyle()
-  .setBold(textStyle.bold)
-  .setForegroundColor(rgbColour[0], rgbColour[1], rgbColour[2])  
-  .setFontFamily(textStyle.fontFamily)  
-  .setFontSize(textStyle.fontSize);
-  
-  //      Align the text centre(horizontally)
-  textRange.getParagraphs()[0].getRange().getParagraphStyle()
-  .setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+  //      Change text style according to the template
+  try {
+    textRange.getTextStyle()
+    .setBold(textStyle.bold)
+    .setForegroundColor(rgbColour[0], rgbColour[1], rgbColour[2])  
+    .setFontFamily(textStyle.fontFamily)  
+    .setFontSize(textStyle.fontSize);
+    Logger.log("checkin3")
+    //      Align the text centre(horizontally)
+    textRange.getParagraphs()[0].getRange().getParagraphStyle()
+    .setParagraphAlignment(SlidesApp.ParagraphAlignment.CENTER);
+    return false    
+  } catch (e) {
+    sheetMain.toast('Error: '+e, 'Status', -1);  
+    return true
+  }
 }
 
 function getData_(){
   //  Get Active Sheet which should be the form sheet
   var sheetForm = SpreadsheetApp.getActiveSpreadsheet();
   var dataRaw = sheetForm.getRangeByName("dataRaw").getValues();
-
+  
   var fileName = sheetForm.getRangeByName("fileName").getValue();
   if (!fileName) {
     var date = new Date();
     fileName = date.getDate() + "." + date.getMonth() + "." + date.getYear();
   }
-      
+  
   var dataPresentations = [];
   
   for (var i=0; i < dataRaw.length; i++) {
@@ -302,7 +322,7 @@ function updateDatabase() {
   
   // get list
   if (outputRows === undefined || outputRows === null ||
-    outputRows[0] === undefined || outputRows[0] === null) {
+      outputRows[0] === undefined || outputRows[0] === null) {
     outputRows = [];
     
     outputRows = getChildFiles_(null, DriveApp.getFolderById(this.folderId), 
@@ -385,15 +405,7 @@ function getChildFolders_(searchDepth, parentFolderName, parentFolder, sheet, li
         childFolder.getId(),
         childFolder.getUrl(),
         parentFolderName + "/" + childFolder.getName(),
-        "Folder",
-        childFolder.getDateCreated(),
-        childFolder.getLastUpdated(),
-        childFolder.getDescription(),
-        childFolder.getSize(),
-        childFolder.getOwner().getEmail(),
-        childFolder.getSharingPermission(),
-        childFolder.getSharingAccess()
-        //, '=HYPERLINK("' + childFile.getUrl() + '", IMAGE("' + Drive.Files.get(childFolder.getId()).thumbnailLink + '",1))' //The 'Drive service' is a G-Suite service (commercial service)
+        "Folder"
       ]);
       
       // cache outputs
@@ -443,15 +455,7 @@ function getChildFiles_(parentFolder, childFolder, listFiles, cacheTimeout, outp
         childFile.getId(),
         childFile.getUrl(),
         path,
-        childFile.getName().split('.').pop(),
-        childFile.getDateCreated(),
-        childFile.getLastUpdated(),
-        childFile.getDescription(),
-        childFile.getSize(),
-        childFile.getOwner().getEmail(),
-        childFile.getSharingPermission(),
-        childFile.getSharingAccess()
-        //, '=HYPERLINK("' + childFile.getUrl() + '", IMAGE("' + Drive.Files.get(childFile.getId()).thumbnailLink + '",1))' //The 'Drive service' is a G-Suite service (commercial service)
+        childFile.getName().split('.').pop()
       ]);
     }
     
@@ -512,8 +516,7 @@ function getCache_(lockWaitTime) {
 function writeOutputs_(sheet, outputRows, appendToSheet) {
   try{
     var range, rowStart, indexStart, indexEnd = null;
-    var headerRow = ["Name", "Id", "URL", "Full Path", "Type", "Date", "Last Updated", "Description", "Size",
-                     "Owner", "Sharing Permission", "Sharing Access"]; //, "Thumbnail"];
+    var headerRow = ["Name", "Id", "URL", "Full Path", "Type"];
     sheetMain.toast('Writing outputs...', 'Status', -1);
     
     if (sheet !== null && outputRows.length > 0) {
