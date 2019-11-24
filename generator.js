@@ -307,6 +307,9 @@ function updateDatabase() {
     
     outputRows = getChildFiles_(null, DriveApp.getFolderById(this.folderId), 
                                 listFiles, cacheTimeout, outputRows);
+    
+    outputRows = getFolderTree_(outputRows, this.folderId, this.listFiles, this.cacheTimeout, 
+                                this.lockWaitTime, this.searchDepthMax);
   }
   
   
@@ -316,6 +319,28 @@ function updateDatabase() {
   sheetMain.toast('Execution is complete!', 'Status', -1);
 }
 
+// ===========================================================================================================
+// Get the list of folders and files
+function getFolderTree_(outputRows, folderId, listFiles, cacheTimeout, lockWaitTime, searchDepthMax) {
+  var parentFolder, sheet = null;
+  var searchDepth = -1;
+  
+  try {
+    // Get folder by id
+    parentFolder = DriveApp.getFolderById(folderId);
+    
+    // Initialise the spreadsheet
+    sheet = sheetMain.getSheetByName("List");
+    
+    // Get files and/or folders
+    outputRows = getChildFolders_(searchDepth, parentFolder.getName(), parentFolder, sheet,
+                                  listFiles, cacheTimeout, lockWaitTime, outputRows, searchDepthMax);
+  } catch (e) {
+    sheetMain.toast('Timed out!', 'Status', -1);
+  }
+  
+  return outputRows;
+}
 
 // ===========================================================================================================
 // Write the list of folders and files into the spreadsheet
@@ -336,6 +361,61 @@ function writeFolderTree_(outputRows, appendToSheet) {
   } catch (e) {
     sheetMain.toast('Timed out!', 'Status', -1);
   }
+}
+
+// ===========================================================================================================
+// Get the list of folders and files and their metadata using a recursive loop
+function getChildFolders_(searchDepth, parentFolderName, parentFolder, sheet, listFiles, cacheTimeout,
+                          lockWaitTime, outputRows, searchDepthMax) {
+  var childFolders = parentFolder.getFolders();
+  var childFolder = null;
+  searchDepth += 1;
+  
+  try{
+    // List sub-folders inside the folder
+    while (childFolders.hasNext() && searchDepth < searchDepthMax && getKillFlag_() === false) {
+      childFolder = childFolders.next();
+      sheetMain.toast('Searching folder ' + childFolder.getName() +
+        ' at depth ' + searchDepth + " ...", 'Status', -1);
+      
+      // Get folder information
+      // Logger.log("Folder Name: " + childFolder.getName());
+      outputRows.push([
+        childFolder.getName(),
+        childFolder.getId(),
+        childFolder.getUrl(),
+        parentFolderName + "/" + childFolder.getName(),
+        "Folder",
+        childFolder.getDateCreated(),
+        childFolder.getLastUpdated(),
+        childFolder.getDescription(),
+        childFolder.getSize(),
+        childFolder.getOwner().getEmail(),
+        childFolder.getSharingPermission(),
+        childFolder.getSharingAccess()
+        //, '=HYPERLINK("' + childFile.getUrl() + '", IMAGE("' + Drive.Files.get(childFolder.getId()).thumbnailLink + '",1))' //The 'Drive service' is a G-Suite service (commercial service)
+      ]);
+      
+      // cache outputs
+      setCache_(outputRows, lockWaitTime, cacheTimeout);
+      
+      // List files inside the folder
+      outputRows = getChildFiles_(
+        parentFolder, childFolder, listFiles, cacheTimeout, outputRows);
+      
+      // Recursive call of the current sub-folder
+      outputRows = getChildFolders_(searchDepth++, parentFolderName + "/" + childFolder.getName(), 
+        childFolder, sheet, listFiles, cacheTimeout, lockWaitTime, outputRows, searchDepthMax);
+    }
+  } catch (e) {
+    Logger.log('Timed out: Restarting! ' + e.toString());
+    sheetMain.toast( 'Timed out!', 'Status', -1);
+  }
+  
+  // cache outputs
+  setCache_(outputRows, lockWaitTime, cacheTimeout);
+  
+  return outputRows;
 }
 
 // ===========================================================================================================
